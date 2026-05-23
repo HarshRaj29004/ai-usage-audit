@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { usePersistentForm } from "../hooks/usePersistentForm";
+import { usePersistentForm } from "../src/hooks/usePersistentForm";
 import {
   ALL_SUPPORTED_TOOLS,
   ALL_USE_CASES,
@@ -11,7 +11,7 @@ import {
   SupportedTool,
   TOOL_PLAN_TIERS,
   UseCase,
-} from "../types/audit";
+} from "../src/types/audit";
 
 const TOOL_LABELS: Record<SupportedTool, string> = {
   [SupportedTool.Cursor]: "Cursor",
