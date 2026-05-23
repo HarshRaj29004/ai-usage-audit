@@ -13,16 +13,16 @@
 - Define strict data models inside `types/audit.ts`.
 
 
-## Day 2 - 2026-05-23
+## Day 2 2026-05-23
 **Hours worked:** 4
+**Overall progress:** Built the persistent spend input form, added dynamic tool rows with add/remove controls, and connected the UI to localStorage so edits survive reloads.
 **What I did:**
-- Finalized core data contracts for audit inputs.
-- Implemented a localStorage-backed React hook to persist form state across reloads.
-- Added APIs to add, update, and remove per-tool entries.
-- Added a full-reset method for successful submission.
-- Consolidated the canonical `src` type and hook modules.
-- Removed duplicate root copies.
-- Rewired `SpendForm` to use the `src` imports so the app now resolves a single source of truth.
+- Finalized the core audit data contracts and canonical `src` module paths.
+- Implemented the localStorage-backed React hook for persisted form state.
+- Added create, update, remove, and reset behavior for tool entries.
+- Rebuilt `SpendForm` around the canonical imports so the app resolves a single source of truth.
+- Removed duplicate root copies to keep the workspace aligned.
+- Connected the form state to persistent storage so edits remain available after reload.
 **What I learned:**
 - Separating data modeling from UI logic reduces refactor friction.
 - Persisted state should be runtime-sanitized to avoid malformed payloads.
@@ -31,5 +31,5 @@
 **Blockers / what I'm stuck on:**
 - No blockers today.
 **Plan for tomorrow:**
-- Continue Phase 1 Step 3 by connecting the persistent form hook deeper into the app flow.
-- Validate the end-to-end submission and reset behavior.
+- Finish Phase 1 Step 3 by hardening the field validation and submission experience.
+- Validate the end-to-end persistence and reset behavior.

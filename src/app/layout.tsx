@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "AI Spend Audit",
+  title: "AI Usage Audit",
   description: "Production-ready AI spend audit workspace.",
 };
 

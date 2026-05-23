@@ -95,31 +95,36 @@ export const usePersistentForm = (
     [initialState],
   );
 
-  const [form, setForm] = useState<AuditFormInputState>(() => {
-    if (typeof window === "undefined") {
-      return resolvedInitialState;
-    }
-
-    const rawStored = window.localStorage.getItem(storageKey);
-    if (!rawStored) {
-      return resolvedInitialState;
-    }
-
-    try {
-      const parsed = JSON.parse(rawStored) as unknown;
-      return sanitizeState(parsed, resolvedInitialState);
-    } catch {
-      return resolvedInitialState;
-    }
-  });
+  const [form, setForm] = useState<AuditFormInputState>(resolvedInitialState);
+  const [isHydrated, setIsHydrated] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
     }
 
+    const rawStored = window.localStorage.getItem(storageKey);
+    if (rawStored) {
+      try {
+        const parsed = JSON.parse(rawStored) as unknown;
+        setForm(sanitizeState(parsed, resolvedInitialState));
+      } catch {
+        setForm(resolvedInitialState);
+      }
+    } else {
+      setForm(resolvedInitialState);
+    }
+
+    setIsHydrated(true);
+  }, [resolvedInitialState, storageKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !isHydrated) {
+      return;
+    }
+
     window.localStorage.setItem(storageKey, JSON.stringify(form));
-  }, [form, storageKey]);
+  }, [form, isHydrated, storageKey]);
 
   const patchForm = useCallback((patch: AuditFormPatch) => {
     setForm((prev) =>
