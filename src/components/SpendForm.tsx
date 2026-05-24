@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { usePersistentForm } from "../hooks/usePersistentForm";
 import {
   ALL_USE_CASES,
@@ -133,6 +133,7 @@ export function SpendForm({ initialState, onSubmit, className }: SpendFormProps)
   const { form, patchForm, setForm, totalMonthlySpend, resetForm } = usePersistentForm(
     initialState ?? DEFAULT_FORM_STATE,
   );
+  const [auditResults, setAuditResults] = useState<null | any>(null);
 
   const selectedTools = useMemo(
     () =>
@@ -187,7 +188,8 @@ export function SpendForm({ initialState, onSubmit, className }: SpendFormProps)
   };
 
   return (
-    <form
+    <>
+      <form
       className={[
         "audit-form",
         className,
@@ -197,6 +199,43 @@ export function SpendForm({ initialState, onSubmit, className }: SpendFormProps)
       onSubmit={(event) => {
         event.preventDefault();
         onSubmit?.(toShareablePayload(form), form);
+        try {
+          // dynamic import of engine to keep bundle small in some contexts
+          // but here import synchronously
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const { calculateAudit } = require("../lib/auditEngine");
+          const engineOutput = calculateAudit(form);
+
+          const tools = form.tools.map((t) => {
+            const entry = engineOutput.breakdown.find((b: any) => String(b.toolId) === String(t.tool));
+            return {
+              tool: String(t.tool),
+              label: TOOL_LABELS[t.tool as SupportedTool] ?? String(t.tool),
+              plan: String(t.plan),
+              currentMonthly: Number(t.monthlySpend ?? 0),
+              recommendedMonthly: entry ? Number(entry.recommendedSpend ?? 0) : Number(t.monthlySpend ?? 0),
+              savings: entry ? Number(entry.savings ?? 0) : 0,
+              reason: entry ? String(entry.reasoning ?? "") : "",
+            };
+          });
+
+          const totalMonthlySavings = engineOutput.totalMonthlySavings ?? tools.reduce((s: number, x: any) => s + (x.savings ?? 0), 0);
+
+          const aiSummary = `Deterministic audit: estimated monthly savings $${totalMonthlySavings.toFixed(2)} (${(
+            (totalMonthlySavings / Math.max(1, toShareablePayload(form).totalMonthlySpend)) * 100
+          ).toFixed(1)}% of current spend).`;
+
+          setAuditResults({
+            tools,
+            totalMonthlySavings,
+            totalMonthlySpend: toShareablePayload(form).totalMonthlySpend,
+            totalAnnualSavings: (engineOutput.totalAnnualSavings ?? totalMonthlySavings * 12),
+            aiSummary,
+          });
+        } catch (err) {
+          // swallow — keep behavior predictable
+          console.error(err);
+        }
       }}
     >
       <div className="audit-form__hero">
@@ -455,6 +494,18 @@ export function SpendForm({ initialState, onSubmit, className }: SpendFormProps)
           </section>
         </aside>
       </div>
-    </form>
+      </form>
+
+      {auditResults ? (
+        <div className="mt-10">
+          {/* Lazy-render AuditResults to show computed recommendations */}
+          {/* eslint-disable-next-line @typescript-eslint/no-var-requires */}
+          {(() => {
+            const AuditResults = require("./AuditResults").default;
+            return <AuditResults results={auditResults} />;
+          })()}
+        </div>
+      ) : null}
+    </>
   );
 }
