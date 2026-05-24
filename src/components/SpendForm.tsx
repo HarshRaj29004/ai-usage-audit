@@ -189,7 +189,7 @@ export function SpendForm({ initialState, onSubmit, className }: SpendFormProps)
   return (
     <form
       className={[
-        "mx-auto w-full max-w-6xl overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.08)]",
+        "audit-form",
         className,
       ]
         .filter(Boolean)
@@ -199,243 +199,261 @@ export function SpendForm({ initialState, onSubmit, className }: SpendFormProps)
         onSubmit?.(toShareablePayload(form), form);
       }}
     >
-      <div className="border-b border-slate-200 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-800 px-6 py-6 text-white sm:px-8">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-300">
-              Phase 1 · Step 3
+      <div className="audit-form__hero">
+        <div className="audit-form__hero-grid">
+          <div className="audit-form__hero-copy">
+            <p className="eyebrow eyebrow--soft">Phase 1 · Step 3</p>
+            <h2 className="audit-form__title">Shape the spend model</h2>
+            <p className="audit-form__lede">
+              Capture team context and individual tool spend in a single persisted workflow.
             </p>
-            <div className="space-y-2">
-              <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">Spend input form</h2>
-              <p className="max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
-                Capture team context and individual tool spend in a single persisted workflow.
-              </p>
+
+            <div className="chip-row">
+              <span className="chip">Saved locally</span>
+              <span className="chip">{form.tools.length} tool rows</span>
+              <span className="chip">${totalMonthlySpend.toFixed(2)} monthly</span>
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2 text-xs font-medium">
-            <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-slate-100">
-              Saved locally
-            </span>
-            <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-slate-100">
-              {form.tools.length} tool rows
-            </span>
-            <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-slate-100">
-              ${totalMonthlySpend.toFixed(2)} monthly
-            </span>
+          <div className="audit-form__summary-grid">
+            <article className="metric-card">
+              <p className="metric-card__eyebrow">Monthly</p>
+              <p className="metric-card__value">${totalMonthlySpend.toFixed(2)}</p>
+              <p className="metric-card__text">Combined current spend across all tracked tools.</p>
+            </article>
+
+            <article className="metric-card">
+              <p className="metric-card__eyebrow">Rows</p>
+              <p className="metric-card__value">{form.tools.length}</p>
+              <p className="metric-card__text">Add one row per tool to keep the audit readable.</p>
+            </article>
+
+            <article className="metric-card">
+              <p className="metric-card__eyebrow">State</p>
+              <p className="metric-card__value">Auto-saved</p>
+              <p className="metric-card__text">Edits are preserved in browser storage while you work.</p>
+            </article>
           </div>
         </div>
       </div>
 
-      <div className="space-y-8 px-6 py-6 sm:px-8 sm:py-8">
-        <section className="grid gap-4 rounded-2xl border border-slate-200 bg-slate-50/80 p-5 md:grid-cols-2">
-          <label className="space-y-2">
-            <span className="block text-xs font-semibold uppercase tracking-[0.18em] text-slate-600">
-              Team size
-            </span>
-            <input
-              type="number"
-              min={1}
-              step={1}
-              value={form.teamSize}
-              onChange={(event) => {
-                patchForm({
-                  teamSize: Math.max(1, clampWholeNumber(event.currentTarget.valueAsNumber || 0)),
-                });
-              }}
-              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-            />
-          </label>
+      <div className="audit-form__body">
+        <div className="audit-form__main">
+          <section className="panel panel--soft">
+            <div className="panel__inner">
+              <div className="field-grid field-grid--two">
+                <label className="field">
+                  <span className="field__label">Team size</span>
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={form.teamSize}
+                    onChange={(event) => {
+                      patchForm({
+                        teamSize: Math.max(1, clampWholeNumber(event.currentTarget.valueAsNumber || 0)),
+                      });
+                    }}
+                    className="field__control"
+                  />
+                </label>
 
-          <label className="space-y-2">
-            <span className="block text-xs font-semibold uppercase tracking-[0.18em] text-slate-600">
-              Primary use case
-            </span>
-            <select
-              value={form.primaryUseCase}
-              onChange={(event) => patchForm({ primaryUseCase: event.currentTarget.value as UseCase })}
-              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-            >
-              {ALL_USE_CASES.map((useCase) => (
-                <option key={useCase} value={useCase}>
-                  {USE_CASE_LABELS[useCase]}
-                </option>
-              ))}
-            </select>
-          </label>
-        </section>
-
-        <section className="space-y-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h3 className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-700">
-                Dynamic tool tracker
-              </h3>
-              <p className="mt-1 text-sm text-slate-500">
-                Add one row per tool and keep every edit synced to local storage.
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={addToolRow}
-              disabled={!canAddAnotherTool}
-              className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-            >
-              Add Tool
-            </button>
-          </div>
-
-          {form.tools.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center">
-              <p className="text-base font-medium text-slate-900">No tools added yet.</p>
-              <p className="mt-2 text-sm text-slate-500">Start by adding Cursor, Copilot, or another tracked tool.</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {form.tools.map((toolConfig, index) => {
-                const rowToolOptions = getToolOptionsForRow(toolConfig.tool);
-                const rowPlanOptions = TOOL_PLAN_TIERS[toolConfig.tool];
-
-                return (
-                  <div
-                    key={`${toolConfig.tool}-${index}`}
-                    className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-300 hover:shadow-md sm:p-5"
+                <label className="field">
+                  <span className="field__label">Primary use case</span>
+                  <select
+                    value={form.primaryUseCase}
+                    onChange={(event) => patchForm({ primaryUseCase: event.currentTarget.value as UseCase })}
+                    className="field__control"
                   >
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900">Tool row {index + 1}</p>
-                        <p className="mt-1 text-sm text-slate-500">
-                          Configure the tool, plan, seat count, and monthly spend.
-                        </p>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => removeToolRow(index)}
-                        className="inline-flex w-fit items-center rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 transition hover:border-rose-300 hover:bg-rose-100"
-                      >
-                        Delete
-                      </button>
-                    </div>
-
-                    <div className="mt-5 grid gap-4 lg:grid-cols-[1.4fr_1fr_0.7fr_1fr]">
-                      <label className="space-y-2">
-                        <span className="block text-xs font-semibold uppercase tracking-[0.18em] text-slate-600">
-                          Tool ID
-                        </span>
-                        <select
-                          value={toolConfig.tool}
-                          onChange={(event) =>
-                            updateToolRow(index, { tool: event.currentTarget.value as SupportedTool })
-                          }
-                          className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-                        >
-                          {rowToolOptions.map((tool) => {
-                            const isTakenByAnotherRow =
-                              selectedTools.get(tool) !== undefined && tool !== toolConfig.tool;
-
-                            return (
-                              <option key={tool} value={tool} disabled={isTakenByAnotherRow}>
-                                {TOOL_LABELS[tool]}
-                              </option>
-                            );
-                          })}
-                        </select>
-                      </label>
-
-                      <label className="space-y-2">
-                        <span className="block text-xs font-semibold uppercase tracking-[0.18em] text-slate-600">
-                          Plan type
-                        </span>
-                        <select
-                          value={toolConfig.plan}
-                          onChange={(event) =>
-                            updateToolRow(index, { plan: event.currentTarget.value as PlanTier })
-                          }
-                          className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-                        >
-                          {rowPlanOptions.map((plan) => (
-                            <option key={plan} value={plan}>
-                              {PLAN_LABELS[plan]}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-
-                      <label className="space-y-2">
-                        <span className="block text-xs font-semibold uppercase tracking-[0.18em] text-slate-600">
-                          Seats
-                        </span>
-                        <input
-                          type="number"
-                          min={0}
-                          step={1}
-                          value={toolConfig.seats}
-                          onChange={(event) =>
-                            updateToolRow(index, {
-                              seats: clampWholeNumber(event.currentTarget.valueAsNumber || 0),
-                            })
-                          }
-                          className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-                        />
-                      </label>
-
-                      <label className="space-y-2">
-                        <span className="block text-xs font-semibold uppercase tracking-[0.18em] text-slate-600">
-                          Current monthly spend (USD)
-                        </span>
-                        <input
-                          type="number"
-                          min={0}
-                          step={0.01}
-                          value={toolConfig.monthlySpend}
-                          onChange={(event) =>
-                            updateToolRow(index, {
-                              monthlySpend: clampCurrency(event.currentTarget.valueAsNumber || 0),
-                            })
-                          }
-                          className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-                        />
-                      </label>
-                    </div>
-                  </div>
-                );
-              })}
+                    {ALL_USE_CASES.map((useCase) => (
+                      <option key={useCase} value={useCase}>
+                        {USE_CASE_LABELS[useCase]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
             </div>
-          )}
+          </section>
 
-          {!canAddAnotherTool ? (
-            <p className="text-sm text-slate-500">
-              All supported tools are already in use. Remove a row to add another.
+          <section className="panel panel--surface tool-section">
+            <div className="panel__inner">
+              <div className="tool-section__header">
+                <div>
+                  <p className="panel__title">Dynamic tool tracker</p>
+                  <p className="panel__text">Add one row per tool and keep every edit synced to local storage.</p>
+                </div>
+
+                <button type="button" onClick={addToolRow} disabled={!canAddAnotherTool} className="btn btn--primary">
+                  Add Tool
+                </button>
+              </div>
+
+              {form.tools.length === 0 ? (
+                <div className="panel panel--soft">
+                  <div className="panel__inner">
+                    <p className="tool-card__title">No tools added yet.</p>
+                    <p className="tool-card__text">Start by adding Cursor, Copilot, or another tracked tool.</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="tool-stack">
+                  {form.tools.map((toolConfig, index) => {
+                    const rowToolOptions = getToolOptionsForRow(toolConfig.tool);
+                    const rowPlanOptions = TOOL_PLAN_TIERS[toolConfig.tool];
+
+                    return (
+                      <article key={`${toolConfig.tool}-${index}`} className="tool-card">
+                        <div className="tool-card__header">
+                          <div>
+                            <p className="tool-card__title">Tool row {index + 1}</p>
+                            <p className="tool-card__text">Configure the tool, plan, seat count, and monthly spend.</p>
+                          </div>
+
+                          <button type="button" onClick={() => removeToolRow(index)} className="btn btn--danger">
+                            Delete
+                          </button>
+                        </div>
+
+                        <div className="tool-card__grid field-grid--tool">
+                          <label className="field">
+                            <span className="field__label">Tool ID</span>
+                            <select
+                              value={toolConfig.tool}
+                              onChange={(event) =>
+                                updateToolRow(index, { tool: event.currentTarget.value as SupportedTool })
+                              }
+                              className="field__control field__control--soft"
+                            >
+                              {rowToolOptions.map((tool) => {
+                                const isTakenByAnotherRow =
+                                  selectedTools.get(tool) !== undefined && tool !== toolConfig.tool;
+
+                                return (
+                                  <option key={tool} value={tool} disabled={isTakenByAnotherRow}>
+                                    {TOOL_LABELS[tool]}
+                                  </option>
+                                );
+                              })}
+                            </select>
+                          </label>
+
+                          <label className="field">
+                            <span className="field__label">Plan type</span>
+                            <select
+                              value={toolConfig.plan}
+                              onChange={(event) =>
+                                updateToolRow(index, { plan: event.currentTarget.value as PlanTier })
+                              }
+                              className="field__control field__control--soft"
+                            >
+                              {rowPlanOptions.map((plan) => (
+                                <option key={plan} value={plan}>
+                                  {PLAN_LABELS[plan]}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+
+                          <label className="field">
+                            <span className="field__label">Seats</span>
+                            <input
+                              type="number"
+                              min={0}
+                              step={1}
+                              value={toolConfig.seats}
+                              onChange={(event) =>
+                                updateToolRow(index, {
+                                  seats: clampWholeNumber(event.currentTarget.valueAsNumber || 0),
+                                })
+                              }
+                              className="field__control field__control--soft"
+                            />
+                          </label>
+
+                          <label className="field">
+                            <span className="field__label">Current monthly spend (USD)</span>
+                            <input
+                              type="number"
+                              min={0}
+                              step={0.01}
+                              value={toolConfig.monthlySpend}
+                              onChange={(event) =>
+                                updateToolRow(index, {
+                                  monthlySpend: clampCurrency(event.currentTarget.valueAsNumber || 0),
+                                })
+                              }
+                              className="field__control field__control--soft"
+                            />
+                          </label>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+
+              {!canAddAnotherTool ? (
+                <p className="panel__text spacer-top">All supported tools are already in use. Remove a row to add another.</p>
+              ) : null}
+            </div>
+          </section>
+        </div>
+
+        <aside className="audit-form__aside">
+          <section className="callout callout--dark">
+            <p className="callout__eyebrow">Summary</p>
+            <p className="callout__value">${totalMonthlySpend.toFixed(2)}</p>
+            <p className="callout__text">
+              Current monthly total across all tracked tools. This is the number the audit will anchor on.
             </p>
-          ) : null}
-        </section>
 
-        <section className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-5 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="text-sm text-slate-600">Current monthly total</p>
-            <p className="mt-1 text-3xl font-semibold tracking-tight text-slate-950">
-              ${totalMonthlySpend.toFixed(2)}
-            </p>
-          </div>
+            <dl className="summary-grid">
+              <div className="summary-card">
+                <dt>Team</dt>
+                <dd>{form.teamSize} people</dd>
+              </div>
+              <div className="summary-card">
+                <dt>Use case</dt>
+                <dd>{USE_CASE_LABELS[form.primaryUseCase]}</dd>
+              </div>
+              <div className="summary-card">
+                <dt>Tools</dt>
+                <dd>{form.tools.length} tracked</dd>
+              </div>
+            </dl>
+          </section>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={resetForm}
-              className="inline-flex items-center justify-center rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:text-slate-950"
-            >
-              Reset
-            </button>
-            <button
-              type="submit"
-              className="inline-flex items-center justify-center rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-700"
-            >
-              Generate shareable audit
-            </button>
-          </div>
-        </section>
+          <section className="panel panel--surface">
+            <div className="panel__inner">
+              <p className="panel__title">What happens next</p>
+              <ul className="callout-list">
+                <li className="callout-list__item">Review the spend total and team context before exporting.</li>
+                <li className="callout-list__item">Reset the workspace if you need to start a fresh audit.</li>
+                <li className="callout-list__item">Generate a shareable payload when the data is ready.</li>
+              </ul>
+            </div>
+          </section>
+
+          <section className="panel panel--surface">
+            <div className="panel__inner">
+              <div>
+                <p className="panel__kicker">Current monthly total</p>
+                <p className="form-footer__value">${totalMonthlySpend.toFixed(2)}</p>
+                <p className="form-footer__note">Use this to confirm the audit is ready before exporting.</p>
+              </div>
+
+              <div className="action-row">
+                <button type="button" onClick={resetForm} className="btn btn--secondary">
+                  Reset
+                </button>
+                <button type="submit" className="btn btn--primary">
+                  Generate shareable audit
+                </button>
+              </div>
+            </div>
+          </section>
+        </aside>
       </div>
     </form>
   );
