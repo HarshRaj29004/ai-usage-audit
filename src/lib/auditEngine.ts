@@ -9,7 +9,7 @@ type Breakdown = {
 };
 
 const PRICING_PER_SEAT: Record<string, Record<string, number>> = {
-  cursor: { pro: 20, business: 40 },
+  cursor: { pro: 20, pro_plus: 60, ultra: 200, team: 40 },
   github_copilot: { individual: 10, business: 19, enterprise: 39 },
   claude: { pro: 20, team: 30 },
   chatgpt: { plus: 20, team: 25 },

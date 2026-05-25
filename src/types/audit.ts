@@ -51,7 +51,7 @@ export const ALL_SUPPORTED_TOOLS: readonly SupportedTool[] = [
 ] as const;
 
 export const TOOL_PLAN_TIERS: Readonly<Record<SupportedTool, readonly PlanTier[]>> = {
-  [SupportedTool.Cursor]: [PlanTier.Hobby, PlanTier.Pro, PlanTier.Business, PlanTier.Enterprise],
+  [SupportedTool.Cursor]: [PlanTier.Hobby, PlanTier.Individual, PlanTier.Team, PlanTier.Enterprise],
   [SupportedTool.GitHubCopilot]: [
     PlanTier.Individual,
     PlanTier.Business,
@@ -70,6 +70,8 @@ export const TOOL_PLAN_TIERS: Readonly<Record<SupportedTool, readonly PlanTier[]
 export interface ToolSpendInput {
   tool: SupportedTool;
   plan: PlanTier;
+  // planVariant is used for tool-specific subplans (e.g. Cursor individual tiers: pro, pro_plus, ultra)
+  planVariant?: string;
   seats: number;
   monthlySpend: number;
 }

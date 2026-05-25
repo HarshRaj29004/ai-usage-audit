@@ -76,6 +76,7 @@ const buildDefaultToolEntry = (tool: SupportedTool): ToolSpendInput => {
   return {
     tool,
     plan: availablePlans[0] ?? PlanTier.Pro,
+    planVariant: undefined,
     seats: 1,
     monthlySpend: 0,
   };
@@ -88,10 +89,17 @@ const normalizeToolEntry = (entry: Partial<ToolSpendInput> & { tool: SupportedTo
   return {
     tool: entry.tool,
     plan: plan ?? PlanTier.Pro,
+    planVariant: typeof entry.planVariant === "string" ? entry.planVariant : undefined,
     seats: clampWholeNumber(coerceNumber(entry.seats, 1)),
     monthlySpend: clampCurrency(coerceNumber(entry.monthlySpend, 0)),
   };
 };
+
+const CURSOR_INDIVIDUAL_OPTIONS = [
+  { id: "pro", label: "Pro", price: 20 },
+  { id: "pro_plus", label: "Pro+", price: 60 },
+  { id: "ultra", label: "Ultra", price: 200 },
+];
 
 const getToolOptionsForRow = (currentTool: SupportedTool): readonly SupportedTool[] => {
   if (SPEND_TOOL_OPTIONS.includes(currentTool)) {
@@ -169,11 +177,45 @@ export function SpendForm({ initialState, onSubmit, className }: SpendFormProps)
           return tool;
         }
 
-        return normalizeToolEntry({
+        const merged = normalizeToolEntry({
           ...tool,
           ...patch,
           tool: patch.tool ?? tool.tool,
         });
+
+        // Special handling for Cursor hierarchical plans
+        if (merged.tool === SupportedTool.Cursor) {
+          // Hobby is free — seats not required
+          if (merged.plan === PlanTier.Hobby) {
+            merged.monthlySpend = 0;
+            merged.seats = 0;
+          }
+
+          // Individual -> variants (price is a flat per-account value; seats not required)
+          if (merged.plan === PlanTier.Individual) {
+            const variant = (patch.planVariant as string) ?? merged.planVariant ?? "pro";
+            const variantPrice = CURSOR_INDIVIDUAL_OPTIONS.find((o) => o.id === variant)?.price ?? 20;
+            merged.planVariant = variant;
+            merged.monthlySpend = clampCurrency(variantPrice);
+            merged.seats = 0;
+          }
+
+          // Team pricing: $40 per user (seats required)
+          if (merged.plan === PlanTier.Team) {
+            const teamPrice = 40;
+            merged.monthlySpend = clampCurrency(merged.seats * teamPrice);
+          }
+
+          // Enterprise: custom monthly price (single value); seats not required
+          if (merged.plan === PlanTier.Enterprise) {
+            if (typeof patch.monthlySpend === "number") {
+              merged.monthlySpend = clampCurrency(patch.monthlySpend);
+            }
+            merged.seats = 0;
+          }
+        }
+
+        return merged;
       }),
       updatedAtIso: new Date().toISOString(),
     }));
@@ -394,21 +436,67 @@ export function SpendForm({ initialState, onSubmit, className }: SpendFormProps)
                             </select>
                           </label>
 
-                          <label className="field">
-                            <span className="field__label">Seats</span>
-                            <input
-                              type="number"
-                              min={0}
-                              step={1}
-                              value={toolConfig.seats}
-                              onChange={(event) =>
-                                updateToolRow(index, {
-                                  seats: clampWholeNumber(event.currentTarget.valueAsNumber || 0),
-                                })
-                              }
-                              className="field__control field__control--soft"
-                            />
-                          </label>
+                          {/* Cursor-specific plan variant / custom price handling */}
+                          {toolConfig.tool === SupportedTool.Cursor ? (
+                            toolConfig.plan === PlanTier.Individual ? (
+                              <label className="field">
+                                <span className="field__label">Individual tier</span>
+                                <select
+                                  value={toolConfig.planVariant ?? "pro"}
+                                  onChange={(event) =>
+                                    updateToolRow(index, { planVariant: event.currentTarget.value })
+                                  }
+                                  className="field__control field__control--soft"
+                                >
+                                  {CURSOR_INDIVIDUAL_OPTIONS.map((o) => (
+                                    <option key={o.id} value={o.id}>
+                                      {o.label} — ${o.price}/seat
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                            ) : toolConfig.plan === PlanTier.Team ? (
+                              <label className="field">
+                                <span className="field__label">Team pricing</span>
+                                <div className="field__control field__control--soft" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                  <span> $40 / user — total will be seats × $40 </span>
+                                </div>
+                              </label>
+                            ) : toolConfig.plan === PlanTier.Enterprise ? (
+                              <label className="field">
+                                <span className="field__label">Enterprise custom monthly price (USD)</span>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step={0.01}
+                                  value={toolConfig.monthlySpend}
+                                  onChange={(event) =>
+                                    updateToolRow(index, { monthlySpend: clampCurrency(event.currentTarget.valueAsNumber || 0) })
+                                  }
+                                  className="field__control field__control--soft"
+                                />
+                              </label>
+                            ) : null
+                          ) : null}
+
+                          {/* Seats only required for non-Cursor tools or Cursor Team plan */}
+                          {!(toolConfig.tool === SupportedTool.Cursor && toolConfig.plan !== PlanTier.Team) ? (
+                            <label className="field">
+                              <span className="field__label">Seats</span>
+                              <input
+                                type="number"
+                                min={0}
+                                step={1}
+                                value={toolConfig.seats}
+                                onChange={(event) =>
+                                  updateToolRow(index, {
+                                    seats: clampWholeNumber(event.currentTarget.valueAsNumber || 0),
+                                  })
+                                }
+                                className="field__control field__control--soft"
+                              />
+                            </label>
+                          ) : null}
 
                           <label className="field">
                             <span className="field__label">Current monthly spend (USD)</span>
@@ -423,6 +511,8 @@ export function SpendForm({ initialState, onSubmit, className }: SpendFormProps)
                                 })
                               }
                               className="field__control field__control--soft"
+                              // for Cursor rows where spend is computed automatically, disable manual edit
+                              disabled={toolConfig.tool === SupportedTool.Cursor && (toolConfig.plan === PlanTier.Individual || toolConfig.plan === PlanTier.Team || toolConfig.plan === PlanTier.Hobby)}
                             />
                           </label>
                         </div>
@@ -509,3 +599,5 @@ export function SpendForm({ initialState, onSubmit, className }: SpendFormProps)
     </>
   );
 }
+
+
