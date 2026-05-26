@@ -17,6 +17,7 @@ const DEFAULT_STORAGE_KEY = "ai-spend-audit:form";
 const DEFAULT_FORM_STATE: AuditFormInputState = {
   teamSize: 1,
   primaryUseCase: UseCase.Coding,
+  activityLevel: "standard",
   tools: [],
   updatedAtIso: new Date().toISOString(),
 };
@@ -120,6 +121,11 @@ const normalizeToolEntry = (entry: unknown): ToolSpendInput | null => {
     usagePromptCachingReadTokens: isFiniteNumber(entry.usagePromptCachingReadTokens)
       ? clampNonNegative(entry.usagePromptCachingReadTokens)
       : 0,
+    activityLevel:
+      entry.activityLevel === "light" || entry.activityLevel === "standard" || entry.activityLevel === "heavy"
+        ? entry.activityLevel
+        : undefined,
+    repoScale: typeof entry.repoScale === "string" ? entry.repoScale : undefined,
   };
 };
 
@@ -153,9 +159,16 @@ const sanitizeState = (incoming: unknown, fallback: AuditFormInputState): AuditF
     return fallback;
   }
 
+  const activityLevel =
+    incoming.activityLevel === "light" || incoming.activityLevel === "standard" || incoming.activityLevel === "heavy"
+      ? incoming.activityLevel
+      : fallback.activityLevel;
+
   return {
     teamSize: isFiniteNumber(incoming.teamSize) ? Math.max(1, clampNonNegative(incoming.teamSize)) : fallback.teamSize,
     primaryUseCase: isUseCase(incoming.primaryUseCase) ? incoming.primaryUseCase : fallback.primaryUseCase,
+    activityLevel,
+    repoScale: typeof incoming.repoScale === "string" ? incoming.repoScale : fallback.repoScale,
     tools: normalizeToolCollection(incoming.tools, fallback.tools),
     updatedAtIso: typeof incoming.updatedAtIso === "string" ? incoming.updatedAtIso : new Date().toISOString(),
   };

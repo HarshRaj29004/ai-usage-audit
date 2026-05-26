@@ -11,6 +11,7 @@ import {
   TOOL_PLAN_TIERS,
   type ToolSpendInput,
   UseCase,
+  type UsageBand,
 } from "../types/audit";
 
 const SPEND_TOOL_OPTIONS: readonly SupportedTool[] = [
@@ -112,9 +113,31 @@ const USE_CASE_LABELS: Record<UseCase, string> = {
   [UseCase.Mixed]: "Mixed",
 };
 
+const ACTIVITY_LEVEL_LABELS: Record<UsageBand, string> = {
+  light: "Light / mild",
+  standard: "Standard",
+  heavy: "Heavy",
+};
+
+type DraftToolSpendInput = Omit<ToolSpendInput, "tool"> & {
+  tool: SupportedTool | "";
+};
+
+const EMPTY_TOOL_ROW: DraftToolSpendInput = {
+  tool: "",
+  plan: PlanTier.Pro,
+  planVariant: undefined,
+  seats: 0,
+  monthlySpend: 0,
+};
+
+const isBlankToolRow = (tool: ToolSpendInput | DraftToolSpendInput): tool is DraftToolSpendInput =>
+  (tool as DraftToolSpendInput).tool === "";
+
 const DEFAULT_FORM_STATE: AuditFormInputState = {
   teamSize: 1,
   primaryUseCase: UseCase.Coding,
+  activityLevel: "standard",
   tools: [],
   updatedAtIso: new Date().toISOString(),
 };
@@ -211,12 +234,12 @@ const calculateAnthropicApiSpend = (entry: ToolSpendInput): number => {
   );
 };
 
-const getToolOptionsForRow = (currentTool: SupportedTool): readonly SupportedTool[] => {
-  if (SPEND_TOOL_OPTIONS.includes(currentTool)) {
+const getToolOptionsForRow = (currentTool: SupportedTool | ""): readonly SupportedTool[] => {
+  if (currentTool && SPEND_TOOL_OPTIONS.includes(currentTool)) {
     return SPEND_TOOL_OPTIONS;
   }
 
-  return [currentTool, ...SPEND_TOOL_OPTIONS];
+  return SPEND_TOOL_OPTIONS;
 };
 
 export interface SpendFormProps {
@@ -226,13 +249,15 @@ export interface SpendFormProps {
 }
 
 const toShareablePayload = (state: AuditFormInputState): ShareableAuditPayload => {
-  const toolBreakdown = state.tools.map((tool) => ({
-    tool: tool.tool,
-    plan: tool.plan,
-    seats: tool.seats,
-    monthlySpend: tool.monthlySpend,
-    annualSpend: tool.monthlySpend * 12,
-  }));
+  const toolBreakdown = state.tools
+    .filter((tool) => !isBlankToolRow(tool as ToolSpendInput | DraftToolSpendInput))
+    .map((tool) => ({
+      tool: tool.tool,
+      plan: tool.plan,
+      seats: tool.seats,
+      monthlySpend: tool.monthlySpend,
+      annualSpend: tool.monthlySpend * 12,
+    }));
 
   const totalMonthlySpend = toolBreakdown.reduce((total, tool) => total + tool.monthlySpend, 0);
 
@@ -252,6 +277,7 @@ export function SpendForm({ initialState, onSubmit, className }: SpendFormProps)
     initialState ?? DEFAULT_FORM_STATE,
   );
   const [auditResults, setAuditResults] = useState<null | any>(null);
+  const tools = form.tools as DraftToolSpendInput[];
 
   useEffect(() => {
     setForm((prev) => {
@@ -445,6 +471,10 @@ export function SpendForm({ initialState, onSubmit, className }: SpendFormProps)
   const selectedTools = useMemo(
     () =>
       form.tools.reduce((counts, tool) => {
+        if (isBlankToolRow(tool as ToolSpendInput | DraftToolSpendInput)) {
+          return counts;
+        }
+
         counts.set(tool.tool, (counts.get(tool.tool) ?? 0) + 1);
         return counts;
       }, new Map<SupportedTool, number>()),
@@ -459,11 +489,9 @@ export function SpendForm({ initialState, onSubmit, className }: SpendFormProps)
       return;
     }
 
-    const nextTool = availableToolSlots[0] ?? SPEND_TOOL_OPTIONS[0];
-
     setForm((prev) => ({
       ...prev,
-      tools: [...prev.tools, buildDefaultToolEntry(nextTool)],
+      tools: [EMPTY_TOOL_ROW as ToolSpendInput, ...prev.tools],
       updatedAtIso: new Date().toISOString(),
     }));
   };
@@ -474,6 +502,18 @@ export function SpendForm({ initialState, onSubmit, className }: SpendFormProps)
       tools: prev.tools.map((tool, toolIndex) => {
         if (toolIndex !== index) {
           return tool;
+        }
+
+        if (isBlankToolRow(tool as ToolSpendInput | DraftToolSpendInput)) {
+          if (!patch.tool) {
+            return tool;
+          }
+
+          return normalizeToolEntry({
+            ...buildDefaultToolEntry(patch.tool),
+            ...patch,
+            tool: patch.tool,
+          });
         }
 
         const merged = normalizeToolEntry({
@@ -594,13 +634,18 @@ export function SpendForm({ initialState, onSubmit, className }: SpendFormProps)
         className={["audit-form", className].filter(Boolean).join(" ")}
         onSubmit={(event) => {
           event.preventDefault();
-          onSubmit?.(toShareablePayload(form), form);
+          const selectedForm: AuditFormInputState = {
+            ...form,
+            tools: form.tools.filter((tool) => !isBlankToolRow(tool as ToolSpendInput | DraftToolSpendInput)),
+          };
+
+          onSubmit?.(toShareablePayload(selectedForm), selectedForm);
           try {
             // eslint-disable-next-line @typescript-eslint/no-var-requires
             const { calculateAudit } = require("../lib/auditEngine");
-            const engineOutput = calculateAudit(form);
+            const engineOutput = calculateAudit(selectedForm);
 
-            const tools = form.tools.map((t) => {
+            const tools = selectedForm.tools.map((t) => {
               const entry = engineOutput.breakdown.find((b: any) => String(b.toolId) === String(t.tool));
               return {
                 tool: String(t.tool),
@@ -620,7 +665,7 @@ export function SpendForm({ initialState, onSubmit, className }: SpendFormProps)
             setAuditResults({
               tools,
               totalMonthlySavings,
-              totalMonthlySpend: toShareablePayload(form).totalMonthlySpend,
+              totalMonthlySpend: toShareablePayload(selectedForm).totalMonthlySpend,
               totalAnnualSavings: engineOutput.totalAnnualSavings ?? totalMonthlySavings * 12,
               aiSummary,
             });
@@ -673,6 +718,21 @@ export function SpendForm({ initialState, onSubmit, className }: SpendFormProps)
                       ))}
                     </select>
                   </label>
+
+                  <label className="field">
+                    <span className="field__label">Usage intensity</span>
+                    <select
+                      value={form.activityLevel ?? "standard"}
+                      onChange={(event) => patchForm({ activityLevel: event.currentTarget.value as UsageBand })}
+                      className="field__control"
+                    >
+                      {Object.entries(ACTIVITY_LEVEL_LABELS).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                 </div>
               </div>
             </section>
@@ -692,17 +752,17 @@ export function SpendForm({ initialState, onSubmit, className }: SpendFormProps)
                   </div>
                 ) : (
                   <div className="tool-stack">
-                    {form.tools.map((toolConfig, index) => {
+                    {tools.map((toolConfig, index) => {
                       const rowToolOptions = getToolOptionsForRow(toolConfig.tool);
-                      const rowPlanOptions = TOOL_PLAN_TIERS[toolConfig.tool];
+                      const rowPlanOptions = toolConfig.tool === "" ? [] : TOOL_PLAN_TIERS[toolConfig.tool];
 
                       return (
                         <article key={`${toolConfig.tool}-${index}`} className="tool-card">
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                             <div>
-                              <p className="tool-card__title">{TOOL_LABELS[toolConfig.tool]}</p>
+                              <p className="tool-card__title">{toolConfig.tool === "" ? "New tool" : TOOL_LABELS[toolConfig.tool]}</p>
                               <p className="tool-card__text" style={{ margin: 0 }}>
-                                {PLAN_LABELS[toolConfig.plan]} {toolConfig.planVariant ? `· ${String(toolConfig.planVariant)}` : ""}
+                                {toolConfig.tool === "" ? "--" : `${PLAN_LABELS[toolConfig.plan]} ${toolConfig.planVariant ? `· ${String(toolConfig.planVariant)}` : ""}`}
                               </p>
                             </div>
                             <div style={{ display: "flex", gap: 8 }}>
@@ -720,6 +780,7 @@ export function SpendForm({ initialState, onSubmit, className }: SpendFormProps)
                                 onChange={(event) => updateToolRow(index, { tool: event.currentTarget.value as SupportedTool })}
                                 className="field__control field__control--soft"
                               >
+                                <option value="">--</option>
                                 {rowToolOptions.map((tool) => {
                                   const isTakenByAnotherRow = selectedTools.get(tool) !== undefined && tool !== toolConfig.tool;
                                   return (
@@ -731,48 +792,52 @@ export function SpendForm({ initialState, onSubmit, className }: SpendFormProps)
                               </select>
                             </label>
 
-                            <label className="field">
-                              <span className="field__label">Plan / Variant</span>
-                              {toolConfig.tool === SupportedTool.GitHubCopilot ? (
-                                <select value={toolConfig.planVariant ?? "free"} onChange={(e) => updateToolRow(index, { planVariant: e.currentTarget.value })} className="field__control field__control--soft">
-                                  {COPILOT_TIER_OPTIONS.map((o) => (
-                                    <option key={o.id} value={o.id}>{renderOptionLabel(o)}</option>
-                                  ))}
-                                </select>
-                              ) : toolConfig.tool === SupportedTool.Claude ? (
-                                <select value={toolConfig.planVariant ?? "free"} onChange={(e) => updateToolRow(index, { planVariant: e.currentTarget.value })} className="field__control field__control--soft">
-                                  {CLAUDE_TIER_OPTIONS.map((o) => (
-                                    <option key={o.id} value={o.id}>{renderOptionLabel(o)}</option>
-                                  ))}
-                                </select>
-                              ) : toolConfig.tool === SupportedTool.ChatGPT ? (
-                                <select value={toolConfig.planVariant ?? "free"} onChange={(e) => updateToolRow(index, { planVariant: e.currentTarget.value })} className="field__control field__control--soft">
-                                  {CHATGPT_TIER_OPTIONS.map((o) => (
-                                    <option key={o.id} value={o.id}>{renderOptionLabel(o)}</option>
-                                  ))}
-                                </select>
-                              ) : toolConfig.tool === SupportedTool.AnthropicApi ? (
-                                <select value={toolConfig.planVariant ?? "opus_4_7"} onChange={(e) => updateToolRow(index, { planVariant: e.currentTarget.value })} className="field__control field__control--soft">
-                                  {ANTHROPIC_MODEL_OPTIONS.map((o) => (
-                                    <option key={o.id} value={o.id}>{renderOptionLabel(o)}</option>
-                                  ))}
-                                </select>
-                              ) : (
-                                <select value={toolConfig.plan} onChange={(e) => updateToolRow(index, { plan: e.currentTarget.value as PlanTier })} className="field__control field__control--soft">
-                                  {rowPlanOptions.map((plan) => <option key={plan} value={plan}>{PLAN_LABELS[plan]}</option>)}
-                                </select>
-                              )}
-                            </label>
+                            {toolConfig.tool !== "" ? (
+                              <>
+                                <label className="field">
+                                  <span className="field__label">Plan / Variant</span>
+                                  {toolConfig.tool === SupportedTool.GitHubCopilot ? (
+                                    <select value={toolConfig.planVariant ?? "free"} onChange={(e) => updateToolRow(index, { planVariant: e.currentTarget.value })} className="field__control field__control--soft">
+                                      {COPILOT_TIER_OPTIONS.map((o) => (
+                                        <option key={o.id} value={o.id}>{renderOptionLabel(o)}</option>
+                                      ))}
+                                    </select>
+                                  ) : toolConfig.tool === SupportedTool.Claude ? (
+                                    <select value={toolConfig.planVariant ?? "free"} onChange={(e) => updateToolRow(index, { planVariant: e.currentTarget.value })} className="field__control field__control--soft">
+                                      {CLAUDE_TIER_OPTIONS.map((o) => (
+                                        <option key={o.id} value={o.id}>{renderOptionLabel(o)}</option>
+                                      ))}
+                                    </select>
+                                  ) : toolConfig.tool === SupportedTool.ChatGPT ? (
+                                    <select value={toolConfig.planVariant ?? "free"} onChange={(e) => updateToolRow(index, { planVariant: e.currentTarget.value })} className="field__control field__control--soft">
+                                      {CHATGPT_TIER_OPTIONS.map((o) => (
+                                        <option key={o.id} value={o.id}>{renderOptionLabel(o)}</option>
+                                      ))}
+                                    </select>
+                                  ) : toolConfig.tool === SupportedTool.AnthropicApi ? (
+                                    <select value={toolConfig.planVariant ?? "opus_4_7"} onChange={(e) => updateToolRow(index, { planVariant: e.currentTarget.value })} className="field__control field__control--soft">
+                                      {ANTHROPIC_MODEL_OPTIONS.map((o) => (
+                                        <option key={o.id} value={o.id}>{renderOptionLabel(o)}</option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    <select value={toolConfig.plan} onChange={(e) => updateToolRow(index, { plan: e.currentTarget.value as PlanTier })} className="field__control field__control--soft">
+                                      {rowPlanOptions.map((plan) => <option key={plan} value={plan}>{PLAN_LABELS[plan]}</option>)}
+                                    </select>
+                                  )}
+                                </label>
 
-                            <label className="field">
-                              <span className="field__label">Seats</span>
-                              <input type="number" min={0} step={1} value={toolConfig.seats} onChange={(e) => updateToolRow(index, { seats: clampWholeNumber(e.currentTarget.valueAsNumber || 0) })} className="field__control field__control--soft" />
-                            </label>
+                                <label className="field">
+                                  <span className="field__label">Seats</span>
+                                  <input type="number" min={0} step={1} value={toolConfig.seats} onChange={(e) => updateToolRow(index, { seats: clampWholeNumber(e.currentTarget.valueAsNumber || 0) })} className="field__control field__control--soft" />
+                                </label>
 
-                            <label className="field">
-                              <span className="field__label">Monthly spend (USD)</span>
-                              <input type="number" min={0} step={0.01} value={toolConfig.monthlySpend} onChange={(e) => updateToolRow(index, { monthlySpend: clampCurrency(e.currentTarget.valueAsNumber || 0) })} className="field__control field__control--soft" />
-                            </label>
+                                <label className="field">
+                                  <span className="field__label">Monthly spend (USD)</span>
+                                  <input type="number" min={0} step={0.01} value={toolConfig.monthlySpend} onChange={(e) => updateToolRow(index, { monthlySpend: clampCurrency(e.currentTarget.valueAsNumber || 0) })} className="field__control field__control--soft" />
+                                </label>
+                              </>
+                            ) : null}
                           </div>
                         </article>
                       );

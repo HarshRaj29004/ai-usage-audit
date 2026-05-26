@@ -6,6 +6,8 @@ export enum UseCase {
   Mixed = "mixed",
 }
 
+export type UsageBand = "light" | "standard" | "heavy";
+
 export enum SupportedTool {
   Cursor = "cursor",
   GitHubCopilot = "github_copilot",
@@ -73,11 +75,15 @@ export interface ToolSpendInput {
   usageOutputTokens?: number;
   usagePromptCachingWriteTokens?: number;
   usagePromptCachingReadTokens?: number;
+  activityLevel?: UsageBand;
+  repoScale?: string;
 }
 
 export interface AuditFormInputState {
   teamSize: number;
   primaryUseCase: UseCase;
+  activityLevel?: UsageBand;
+  repoScale?: string;
   tools: ToolSpendInput[];
   updatedAtIso: string;
 }
