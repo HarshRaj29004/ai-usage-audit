@@ -52,14 +52,9 @@ export const ALL_SUPPORTED_TOOLS: readonly SupportedTool[] = [
 
 export const TOOL_PLAN_TIERS: Readonly<Record<SupportedTool, readonly PlanTier[]>> = {
   [SupportedTool.Cursor]: [PlanTier.Hobby, PlanTier.Individual, PlanTier.Team, PlanTier.Enterprise],
-  [SupportedTool.GitHubCopilot]: [
-    PlanTier.Individual,
-    PlanTier.Business,
-    PlanTier.Enterprise,
-    PlanTier.Team,
-  ],
+  [SupportedTool.GitHubCopilot]: [PlanTier.Individual],
   [SupportedTool.Claude]: [PlanTier.Pro, PlanTier.Max, PlanTier.Team, PlanTier.Enterprise],
-  [SupportedTool.ChatGPT]: [PlanTier.Individual, PlanTier.Pro, PlanTier.Team, PlanTier.Enterprise],
+  [SupportedTool.ChatGPT]: [PlanTier.Individual, PlanTier.Pro, PlanTier.Team, PlanTier.Business, PlanTier.Enterprise],
   [SupportedTool.AnthropicApi]: [PlanTier.ApiDirect],
   [SupportedTool.OpenAiApi]: [PlanTier.ApiDirect],
   [SupportedTool.Gemini]: [PlanTier.Individual, PlanTier.Pro, PlanTier.Business, PlanTier.Enterprise],
@@ -74,6 +69,10 @@ export interface ToolSpendInput {
   planVariant?: string;
   seats: number;
   monthlySpend: number;
+  usageInputTokens?: number;
+  usageOutputTokens?: number;
+  usagePromptCachingWriteTokens?: number;
+  usagePromptCachingReadTokens?: number;
 }
 
 export interface AuditFormInputState {
