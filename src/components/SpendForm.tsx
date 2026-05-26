@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { usePersistentForm } from "../hooks/usePersistentForm";
 import {
   ALL_USE_CASES,
@@ -48,6 +48,62 @@ const PLAN_LABELS: Record<PlanTier, string> = {
   [PlanTier.ApiDirect]: "API Direct",
 };
 
+type OptionChoice = {
+  id: string;
+  label: string;
+  price?: number;
+  priceLabel?: string;
+  needsTeamSize?: boolean;
+};
+
+const renderOptionLabel = (option: OptionChoice): string => {
+  if (option.priceLabel) {
+    return `${option.label}${option.priceLabel}`;
+  }
+
+  if (typeof option.price === "number") {
+    return option.price > 0 ? `${option.label} - $${option.price}/month` : option.label;
+  }
+
+  return option.label;
+};
+
+const COPILOT_TIER_OPTIONS: readonly OptionChoice[] = [
+  { id: "free", label: "Free", price: 0, priceLabel: " - $0/user/month" },
+  { id: "pro", label: "Pro", price: 10, priceLabel: " - $10/user/month" },
+  { id: "pro_plus", label: "Pro+", price: 39, priceLabel: " - $39/user/month" },
+] as const;
+
+const CHATGPT_TIER_OPTIONS: readonly OptionChoice[] = [
+  { id: "free", label: "Free", price: 0, priceLabel: " - $0/month", needsTeamSize: false },
+  { id: "go", label: "Go", price: 4, priceLabel: " - $4/month", needsTeamSize: false },
+  { id: "plus", label: "Plus", price: 20, priceLabel: " - $20/month", needsTeamSize: false },
+  { id: "pro", label: "Pro", price: 106, priceLabel: " - $106/month", needsTeamSize: false },
+  { id: "business", label: "Business", price: 1800, priceLabel: " - $1,800/user/month", needsTeamSize: true },
+  { id: "enterprise", label: "Enterprise", priceLabel: " - custom monthly price", needsTeamSize: false },
+] as const;
+
+const CLAUDE_TIER_OPTIONS: readonly OptionChoice[] = [
+  { id: "free", label: "Free", price: 0, priceLabel: " - $0/month", needsTeamSize: false },
+  { id: "pro", label: "Pro", price: 17, priceLabel: " - $17/month", needsTeamSize: false },
+  { id: "max5x", label: "Max5x", price: 100, priceLabel: " - $100/month", needsTeamSize: false },
+  { id: "max10x", label: "Max10x", price: 200, priceLabel: " - $200/month", needsTeamSize: false },
+  { id: "team", label: "Team", price: 25, priceLabel: " - $25/user/month", needsTeamSize: true },
+  { id: "enterprise", label: "Enterprise", price: 20, priceLabel: " - $20/user/month", needsTeamSize: true },
+] as const;
+
+const ANTHROPIC_MODEL_OPTIONS: readonly OptionChoice[] = [
+  { id: "opus_4_7", label: "Opus 4.7", priceLabel: " - input/output priced" },
+  { id: "sonnet_4_6", label: "Sonnet 4.6", priceLabel: " - input/output priced" },
+  { id: "haiku_4_5", label: "Haiku 4.5", priceLabel: " - input/output priced" },
+] as const;
+
+const CURSOR_INDIVIDUAL_OPTIONS: readonly OptionChoice[] = [
+  { id: "pro", label: "Pro", price: 20, priceLabel: " - $20/seat" },
+  { id: "pro_plus", label: "Pro+", price: 60, priceLabel: " - $60/seat" },
+  { id: "ultra", label: "Ultra", price: 200, priceLabel: " - $200/seat" },
+] as const;
+
 const USE_CASE_LABELS: Record<UseCase, string> = {
   [UseCase.Coding]: "Coding",
   [UseCase.Writing]: "Writing",
@@ -73,6 +129,40 @@ const coerceNumber = (value: unknown, fallback: number): number =>
 const buildDefaultToolEntry = (tool: SupportedTool): ToolSpendInput => {
   const availablePlans = TOOL_PLAN_TIERS[tool];
 
+  if (tool === SupportedTool.GitHubCopilot) {
+    return {
+      tool,
+      plan: PlanTier.Individual,
+      planVariant: "free",
+      seats: 0,
+      monthlySpend: 0,
+    };
+  }
+
+  if (tool === SupportedTool.Claude) {
+    return {
+      tool,
+      plan: PlanTier.Individual,
+      planVariant: "free",
+      seats: 0,
+      monthlySpend: 0,
+    };
+  }
+
+  if (tool === SupportedTool.AnthropicApi) {
+    return {
+      tool,
+      plan: PlanTier.ApiDirect,
+      planVariant: "opus_4_7",
+      seats: 0,
+      monthlySpend: 0,
+      usageInputTokens: 0,
+      usageOutputTokens: 0,
+      usagePromptCachingWriteTokens: 0,
+      usagePromptCachingReadTokens: 0,
+    };
+  }
+
   return {
     tool,
     plan: availablePlans[0] ?? PlanTier.Pro,
@@ -92,14 +182,34 @@ const normalizeToolEntry = (entry: Partial<ToolSpendInput> & { tool: SupportedTo
     planVariant: typeof entry.planVariant === "string" ? entry.planVariant : undefined,
     seats: clampWholeNumber(coerceNumber(entry.seats, 1)),
     monthlySpend: clampCurrency(coerceNumber(entry.monthlySpend, 0)),
+    usageInputTokens: clampWholeNumber(coerceNumber(entry.usageInputTokens, 0)),
+    usageOutputTokens: clampWholeNumber(coerceNumber(entry.usageOutputTokens, 0)),
+    usagePromptCachingWriteTokens: clampWholeNumber(coerceNumber(entry.usagePromptCachingWriteTokens, 0)),
+    usagePromptCachingReadTokens: clampWholeNumber(coerceNumber(entry.usagePromptCachingReadTokens, 0)),
   };
 };
 
-const CURSOR_INDIVIDUAL_OPTIONS = [
-  { id: "pro", label: "Pro", price: 20 },
-  { id: "pro_plus", label: "Pro+", price: 60 },
-  { id: "ultra", label: "Ultra", price: 200 },
-];
+const calculateAnthropicApiSpend = (entry: ToolSpendInput): number => {
+  const model = String(entry.planVariant ?? "opus_4_7");
+  const rates =
+    model === "sonnet_4_6"
+      ? { input: 3, output: 15, write: 3.75, read: 0.3 }
+      : model === "haiku_4_5"
+        ? { input: 1, output: 5, write: 1.25, read: 0.1 }
+        : { input: 5, output: 25, write: 6.25, read: 0.5 };
+
+  const inputTokens = clampWholeNumber(coerceNumber(entry.usageInputTokens, 0));
+  const outputTokens = clampWholeNumber(coerceNumber(entry.usageOutputTokens, 0));
+  const writeTokens = clampWholeNumber(coerceNumber(entry.usagePromptCachingWriteTokens, 0));
+  const readTokens = clampWholeNumber(coerceNumber(entry.usagePromptCachingReadTokens, 0));
+
+  return clampCurrency(
+    (inputTokens / 1_000_000) * rates.input +
+      (outputTokens / 1_000_000) * rates.output +
+      (writeTokens / 1_000_000) * rates.write +
+      (readTokens / 1_000_000) * rates.read,
+  );
+};
 
 const getToolOptionsForRow = (currentTool: SupportedTool): readonly SupportedTool[] => {
   if (SPEND_TOOL_OPTIONS.includes(currentTool)) {
@@ -143,6 +253,195 @@ export function SpendForm({ initialState, onSubmit, className }: SpendFormProps)
   );
   const [auditResults, setAuditResults] = useState<null | any>(null);
 
+  useEffect(() => {
+    setForm((prev) => {
+      let changed = false;
+      const tools = prev.tools.map((tool) => {
+        if (tool.tool !== SupportedTool.GitHubCopilot) {
+          if (
+            tool.tool !== SupportedTool.Claude &&
+            tool.tool !== SupportedTool.AnthropicApi &&
+            tool.tool !== SupportedTool.ChatGPT
+          ) {
+            return tool;
+          }
+        }
+
+        if (tool.tool === SupportedTool.GitHubCopilot) {
+          const variant = tool.planVariant && COPILOT_TIER_OPTIONS.some((option) => option.id === tool.planVariant)
+            ? tool.planVariant
+            : "free";
+          const variantPrice = COPILOT_TIER_OPTIONS.find((option) => option.id === variant)?.price ?? 0;
+          const effectiveSeats = variant === "free" ? 0 : Math.max(1, tool.seats);
+          const nextMonthlySpend = clampCurrency(variantPrice * effectiveSeats);
+
+          if (
+            tool.plan !== PlanTier.Individual ||
+            tool.planVariant !== variant ||
+            tool.monthlySpend !== nextMonthlySpend ||
+            tool.seats !== effectiveSeats
+          ) {
+            changed = true;
+            return {
+              ...tool,
+              plan: PlanTier.Individual,
+              planVariant: variant,
+              seats: effectiveSeats,
+              monthlySpend: nextMonthlySpend,
+            };
+          }
+
+          return tool;
+        }
+
+        if (tool.tool === SupportedTool.Claude) {
+          const variant = tool.planVariant && CLAUDE_TIER_OPTIONS.some((option) => option.id === tool.planVariant)
+            ? tool.planVariant
+            : "free";
+          const variantConfig = CLAUDE_TIER_OPTIONS.find((option) => option.id === variant) ?? CLAUDE_TIER_OPTIONS[0];
+          const variantPrice = variantConfig.price ?? 0;
+          const effectiveSeats = variantConfig.needsTeamSize ? Math.max(1, tool.seats) : 0;
+          const nextMonthlySpend = variantConfig.needsTeamSize
+            ? clampCurrency(variantPrice * effectiveSeats)
+            : clampCurrency(variantPrice);
+
+          if (
+            tool.planVariant !== variant ||
+            tool.monthlySpend !== nextMonthlySpend ||
+            tool.seats !== effectiveSeats ||
+            (variantConfig.needsTeamSize ? tool.plan !== (variant === "enterprise" ? PlanTier.Enterprise : PlanTier.Team) : tool.plan !== PlanTier.Individual)
+          ) {
+            changed = true;
+            return {
+              ...tool,
+              plan: variantConfig.needsTeamSize
+                ? variant === "enterprise"
+                  ? PlanTier.Enterprise
+                  : PlanTier.Team
+                : PlanTier.Individual,
+              planVariant: variant,
+              seats: effectiveSeats,
+              monthlySpend: nextMonthlySpend,
+            };
+          }
+
+          return tool;
+        }
+
+        if (tool.tool === SupportedTool.ChatGPT) {
+          const variant = tool.planVariant && CHATGPT_TIER_OPTIONS.some((option) => option.id === tool.planVariant)
+            ? tool.planVariant
+            : "free";
+          const variantPrice = CHATGPT_TIER_OPTIONS.find((option) => option.id === variant)?.price ?? 0;
+
+          // Business: $1800 per user
+          if (variant === "business") {
+            const effectiveSeats = Math.max(1, tool.seats);
+            const nextMonthlySpend = clampCurrency(1800 * effectiveSeats);
+
+            if (
+              tool.plan !== PlanTier.Business ||
+              tool.planVariant !== variant ||
+              tool.monthlySpend !== nextMonthlySpend ||
+              tool.seats !== effectiveSeats
+            ) {
+              changed = true;
+              return {
+                ...tool,
+                plan: PlanTier.Business,
+                planVariant: variant,
+                seats: effectiveSeats,
+                monthlySpend: nextMonthlySpend,
+              };
+            }
+
+            return tool;
+          }
+
+          // Enterprise: editable monthly price, seats not required.
+          if (variant === "enterprise") {
+            const nextMonthlySpend = clampCurrency(coerceNumber(tool.monthlySpend, 0));
+            if (
+              tool.plan !== PlanTier.Enterprise ||
+              tool.planVariant !== variant ||
+              tool.seats !== 0 ||
+              tool.monthlySpend !== nextMonthlySpend
+            ) {
+              changed = true;
+              return {
+                ...tool,
+                plan: PlanTier.Enterprise,
+                planVariant: variant,
+                seats: 0,
+                monthlySpend: nextMonthlySpend,
+              };
+            }
+
+            return tool;
+          }
+
+          // Individual tiers always use a single seat.
+          const effectiveSeats = 1;
+          const nextMonthlySpend = clampCurrency(variantPrice * effectiveSeats);
+          const expectedPlan = PlanTier.Individual;
+
+          if (
+            tool.plan !== expectedPlan ||
+            tool.planVariant !== variant ||
+            tool.monthlySpend !== nextMonthlySpend ||
+            tool.seats !== effectiveSeats
+          ) {
+            changed = true;
+            return {
+              ...tool,
+              plan: expectedPlan,
+              planVariant: variant,
+              seats: effectiveSeats,
+              monthlySpend: nextMonthlySpend,
+            };
+          }
+
+          return tool;
+        }
+
+        const model = tool.planVariant && ANTHROPIC_MODEL_OPTIONS.some((option) => option.id === tool.planVariant)
+          ? tool.planVariant
+          : "opus_4_7";
+        const nextMonthlySpend = calculateAnthropicApiSpend({
+          ...tool,
+          planVariant: model,
+        });
+
+        if (
+          tool.plan !== PlanTier.ApiDirect ||
+          tool.planVariant !== model ||
+          tool.monthlySpend !== nextMonthlySpend
+        ) {
+          changed = true;
+          return {
+            ...tool,
+            plan: PlanTier.ApiDirect,
+            planVariant: model,
+            seats: 0,
+            monthlySpend: nextMonthlySpend,
+          };
+        }
+
+        return tool;
+      });
+
+      if (!changed) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        tools,
+        updatedAtIso: new Date().toISOString(),
+      };
+    });
+  }, [form.tools, setForm]);
+
   const selectedTools = useMemo(
     () =>
       form.tools.reduce((counts, tool) => {
@@ -182,6 +481,66 @@ export function SpendForm({ initialState, onSubmit, className }: SpendFormProps)
           ...patch,
           tool: patch.tool ?? tool.tool,
         });
+
+        if (merged.tool === SupportedTool.GitHubCopilot) {
+          const variant = (patch.planVariant as string) ?? merged.planVariant ?? "free";
+          const variantPrice = COPILOT_TIER_OPTIONS.find((option) => option.id === variant)?.price ?? 0;
+          merged.plan = PlanTier.Individual;
+          merged.planVariant = variant;
+          merged.seats = variant === "free"
+            ? 0
+            : Math.max(1, clampWholeNumber(coerceNumber(patch.seats ?? merged.seats, merged.seats)));
+          merged.monthlySpend = clampCurrency(variantPrice * merged.seats);
+        } else if (merged.tool === SupportedTool.Claude) {
+          const variant = (patch.planVariant as string) ?? merged.planVariant ?? "free";
+          const variantConfig = CLAUDE_TIER_OPTIONS.find((option) => option.id === variant) ?? CLAUDE_TIER_OPTIONS[0];
+          const variantPrice = variantConfig.price ?? 0;
+          merged.planVariant = variant;
+          merged.plan = variantConfig.needsTeamSize
+            ? variant === "enterprise"
+              ? PlanTier.Enterprise
+              : PlanTier.Team
+            : PlanTier.Individual;
+          merged.seats = variantConfig.needsTeamSize
+            ? Math.max(1, clampWholeNumber(coerceNumber(patch.seats ?? merged.seats, merged.seats)))
+            : 0;
+          merged.monthlySpend = clampCurrency(
+            variantConfig.needsTeamSize ? variantPrice * merged.seats : variantPrice,
+          );
+        } else if (merged.tool === SupportedTool.AnthropicApi) {
+          const model = (patch.planVariant as string) ?? merged.planVariant ?? "opus_4_7";
+          merged.plan = PlanTier.ApiDirect;
+          merged.planVariant = model;
+          merged.seats = 0;
+          merged.monthlySpend = calculateAnthropicApiSpend({
+            ...merged,
+            planVariant: model,
+          });
+        } else if (merged.tool === SupportedTool.ChatGPT) {
+          const variant = (patch.planVariant as string) ?? merged.planVariant ?? "free";
+          const variantPrice = CHATGPT_TIER_OPTIONS.find((o) => o.id === variant)?.price ?? 0;
+
+          // Business: $1800 per user
+          if (variant === "business") {
+            merged.plan = PlanTier.Business;
+            merged.planVariant = variant;
+            merged.seats = Math.max(1, clampWholeNumber(coerceNumber(patch.seats ?? merged.seats, merged.seats)));
+            merged.monthlySpend = clampCurrency(1800 * merged.seats);
+          } else if (variant === "enterprise") {
+            merged.plan = PlanTier.Enterprise;
+            merged.planVariant = variant;
+            merged.seats = 0;
+            if (typeof patch.monthlySpend === "number") {
+              merged.monthlySpend = clampCurrency(patch.monthlySpend);
+            }
+          } else {
+            // Individual tiers always use one seat.
+            merged.planVariant = variant;
+            merged.plan = PlanTier.Individual;
+            merged.seats = 1;
+            merged.monthlySpend = clampCurrency(variantPrice * merged.seats);
+          }
+        }
 
         // Special handling for Cursor hierarchical plans
         if (merged.tool === SupportedTool.Cursor) {
@@ -232,363 +591,215 @@ export function SpendForm({ initialState, onSubmit, className }: SpendFormProps)
   return (
     <>
       <form
-      className={[
-        "audit-form",
-        className,
-      ]
-        .filter(Boolean)
-        .join(" ")}
-      onSubmit={(event) => {
-        event.preventDefault();
-        onSubmit?.(toShareablePayload(form), form);
-        try {
-          // dynamic import of engine to keep bundle small in some contexts
-          // but here import synchronously
-          // eslint-disable-next-line @typescript-eslint/no-var-requires
-          const { calculateAudit } = require("../lib/auditEngine");
-          const engineOutput = calculateAudit(form);
+        className={["audit-form", className].filter(Boolean).join(" ")}
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSubmit?.(toShareablePayload(form), form);
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const { calculateAudit } = require("../lib/auditEngine");
+            const engineOutput = calculateAudit(form);
 
-          const tools = form.tools.map((t) => {
-            const entry = engineOutput.breakdown.find((b: any) => String(b.toolId) === String(t.tool));
-            return {
-              tool: String(t.tool),
-              label: TOOL_LABELS[t.tool as SupportedTool] ?? String(t.tool),
-              plan: String(t.plan),
-              currentMonthly: Number(t.monthlySpend ?? 0),
-              recommendedMonthly: entry ? Number(entry.recommendedSpend ?? 0) : Number(t.monthlySpend ?? 0),
-              savings: entry ? Number(entry.savings ?? 0) : 0,
-              reason: entry ? String(entry.reasoning ?? "") : "",
-            };
-          });
+            const tools = form.tools.map((t) => {
+              const entry = engineOutput.breakdown.find((b: any) => String(b.toolId) === String(t.tool));
+              return {
+                tool: String(t.tool),
+                label: TOOL_LABELS[t.tool as SupportedTool] ?? String(t.tool),
+                plan: String(t.plan),
+                currentMonthly: Number(t.monthlySpend ?? 0),
+                recommendedMonthly: entry ? Number(entry.recommendedSpend ?? 0) : Number(t.monthlySpend ?? 0),
+                savings: entry ? Number(entry.savings ?? 0) : 0,
+                reason: entry ? String(entry.reasoning ?? "") : "",
+              };
+            });
 
-          const totalMonthlySavings = engineOutput.totalMonthlySavings ?? tools.reduce((s: number, x: any) => s + (x.savings ?? 0), 0);
+            const totalMonthlySavings = engineOutput.totalMonthlySavings ?? tools.reduce((s: number, x: any) => s + (x.savings ?? 0), 0);
 
-          const aiSummary = `Deterministic audit: estimated monthly savings $${totalMonthlySavings.toFixed(2)} (${(
-            (totalMonthlySavings / Math.max(1, toShareablePayload(form).totalMonthlySpend)) * 100
-          ).toFixed(1)}% of current spend).`;
+            const aiSummary = `Deterministic audit: estimated monthly savings $${totalMonthlySavings.toFixed(2)}.`;
 
-          setAuditResults({
-            tools,
-            totalMonthlySavings,
-            totalMonthlySpend: toShareablePayload(form).totalMonthlySpend,
-            totalAnnualSavings: (engineOutput.totalAnnualSavings ?? totalMonthlySavings * 12),
-            aiSummary,
-          });
-        } catch (err) {
-          // swallow — keep behavior predictable
-          console.error(err);
-        }
-      }}
-    >
-      <div className="audit-form__hero">
-        <div className="audit-form__hero-grid">
+            setAuditResults({
+              tools,
+              totalMonthlySavings,
+              totalMonthlySpend: toShareablePayload(form).totalMonthlySpend,
+              totalAnnualSavings: engineOutput.totalAnnualSavings ?? totalMonthlySavings * 12,
+              aiSummary,
+            });
+          } catch (err) {
+            console.error(err);
+          }
+        }}
+      >
+        <div className="audit-form__hero" style={{ padding: 20 }}>
           <div className="audit-form__hero-copy">
-            <p className="eyebrow eyebrow--soft">Phase 1 · Step 3</p>
-            <h2 className="audit-form__title">Shape the spend model</h2>
-            <p className="audit-form__lede">
-              Capture team context and individual tool spend in a single persisted workflow.
-            </p>
-
-            <div className="chip-row">
-              <span className="chip">Saved locally</span>
-              <span className="chip">{form.tools.length} tool rows</span>
-              <span className="chip">${totalMonthlySpend.toFixed(2)} monthly</span>
+            <h2 className="audit-form__title">Spend model</h2>
+            <p className="audit-form__lede">Quickly capture team size and active tool spend.</p>
+            <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
+              <div className="chip">{form.tools.length} tools</div>
+              <div className="chip">${totalMonthlySpend.toFixed(0)} / month</div>
             </div>
-          </div>
-
-          <div className="audit-form__summary-grid">
-            <article className="metric-card">
-              <p className="metric-card__eyebrow">Monthly</p>
-              <p className="metric-card__value">${totalMonthlySpend.toFixed(2)}</p>
-              <p className="metric-card__text">Combined current spend across all tracked tools.</p>
-            </article>
-
-            <article className="metric-card">
-              <p className="metric-card__eyebrow">Rows</p>
-              <p className="metric-card__value">{form.tools.length}</p>
-              <p className="metric-card__text">Add one row per tool to keep the audit readable.</p>
-            </article>
-
-            <article className="metric-card">
-              <p className="metric-card__eyebrow">State</p>
-              <p className="metric-card__value">Auto-saved</p>
-              <p className="metric-card__text">Edits are preserved in browser storage while you work.</p>
-            </article>
           </div>
         </div>
-      </div>
 
-      <div className="audit-form__body">
-        <div className="audit-form__main">
-          <section className="panel panel--soft">
-            <div className="panel__inner">
-              <div className="field-grid field-grid--two">
-                <label className="field">
-                  <span className="field__label">Team size</span>
-                  <input
-                    type="number"
-                    min={1}
-                    step={1}
-                    value={form.teamSize}
-                    onChange={(event) => {
-                      patchForm({
-                        teamSize: Math.max(1, clampWholeNumber(event.currentTarget.valueAsNumber || 0)),
-                      });
-                    }}
-                    className="field__control"
-                  />
-                </label>
+        <div className="audit-form__body">
+          <div className="audit-form__main">
+            <section className="panel panel--soft">
+              <div className="panel__inner" style={{ padding: 16 }}>
+                <div className="field-grid field-grid--two">
+                  <label className="field">
+                    <span className="field__label">Team size</span>
+                    <input
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={form.teamSize}
+                      onChange={(event) => {
+                        patchForm({ teamSize: Math.max(1, clampWholeNumber(event.currentTarget.valueAsNumber || 0)) });
+                      }}
+                      className="field__control"
+                    />
+                  </label>
 
-                <label className="field">
-                  <span className="field__label">Primary use case</span>
-                  <select
-                    value={form.primaryUseCase}
-                    onChange={(event) => patchForm({ primaryUseCase: event.currentTarget.value as UseCase })}
-                    className="field__control"
-                  >
-                    {ALL_USE_CASES.map((useCase) => (
-                      <option key={useCase} value={useCase}>
-                        {USE_CASE_LABELS[useCase]}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                  <label className="field">
+                    <span className="field__label">Primary use case</span>
+                    <select
+                      value={form.primaryUseCase}
+                      onChange={(event) => patchForm({ primaryUseCase: event.currentTarget.value as UseCase })}
+                      className="field__control"
+                    >
+                      {ALL_USE_CASES.map((useCase) => (
+                        <option key={useCase} value={useCase}>
+                          {USE_CASE_LABELS[useCase]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
               </div>
-            </div>
-          </section>
+            </section>
 
-          <section className="panel panel--surface tool-section">
-            <div className="panel__inner">
-              <div className="tool-section__header">
-                <div>
-                  <p className="panel__title">Dynamic tool tracker</p>
-                  <p className="panel__text">Add one row per tool and keep every edit synced to local storage.</p>
+            <section className="panel panel--surface tool-section">
+              <div className="panel__inner">
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <p className="panel__title">Tools</p>
+                  <button type="button" onClick={addToolRow} disabled={!canAddAnotherTool} className="btn btn--primary">
+                    Add Tool
+                  </button>
                 </div>
 
-                <button type="button" onClick={addToolRow} disabled={!canAddAnotherTool} className="btn btn--primary">
-                  Add Tool
-                </button>
-              </div>
-
-              {form.tools.length === 0 ? (
-                <div className="panel panel--soft">
-                  <div className="panel__inner">
-                    <p className="tool-card__title">No tools added yet.</p>
-                    <p className="tool-card__text">Start by adding Cursor, Copilot, or another tracked tool.</p>
+                {form.tools.length === 0 ? (
+                  <div style={{ padding: 12 }}>
+                    <p style={{ margin: 0 }}>No tools yet. Click “Add Tool” to start.</p>
                   </div>
-                </div>
-              ) : (
-                <div className="tool-stack">
-                  {form.tools.map((toolConfig, index) => {
-                    const rowToolOptions = getToolOptionsForRow(toolConfig.tool);
-                    const rowPlanOptions = TOOL_PLAN_TIERS[toolConfig.tool];
+                ) : (
+                  <div className="tool-stack">
+                    {form.tools.map((toolConfig, index) => {
+                      const rowToolOptions = getToolOptionsForRow(toolConfig.tool);
+                      const rowPlanOptions = TOOL_PLAN_TIERS[toolConfig.tool];
 
-                    return (
-                      <article key={`${toolConfig.tool}-${index}`} className="tool-card">
-                        <div className="tool-card__header">
-                          <div>
-                            <p className="tool-card__title">Tool row {index + 1}</p>
-                            <p className="tool-card__text">Configure the tool, plan, seat count, and monthly spend.</p>
+                      return (
+                        <article key={`${toolConfig.tool}-${index}`} className="tool-card">
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <div>
+                              <p className="tool-card__title">{TOOL_LABELS[toolConfig.tool]}</p>
+                              <p className="tool-card__text" style={{ margin: 0 }}>
+                                {PLAN_LABELS[toolConfig.plan]} {toolConfig.planVariant ? `· ${String(toolConfig.planVariant)}` : ""}
+                              </p>
+                            </div>
+                            <div style={{ display: "flex", gap: 8 }}>
+                              <button type="button" onClick={() => removeToolRow(index)} className="btn btn--danger">
+                                Delete
+                              </button>
+                            </div>
                           </div>
 
-                          <button type="button" onClick={() => removeToolRow(index)} className="btn btn--danger">
-                            Delete
-                          </button>
-                        </div>
-
-                        <div className="tool-card__grid field-grid--tool">
-                          <label className="field">
-                            <span className="field__label">Tool ID</span>
-                            <select
-                              value={toolConfig.tool}
-                              onChange={(event) =>
-                                updateToolRow(index, { tool: event.currentTarget.value as SupportedTool })
-                              }
-                              className="field__control field__control--soft"
-                            >
-                              {rowToolOptions.map((tool) => {
-                                const isTakenByAnotherRow =
-                                  selectedTools.get(tool) !== undefined && tool !== toolConfig.tool;
-
-                                return (
-                                  <option key={tool} value={tool} disabled={isTakenByAnotherRow}>
-                                    {TOOL_LABELS[tool]}
-                                  </option>
-                                );
-                              })}
-                            </select>
-                          </label>
-
-                          <label className="field">
-                            <span className="field__label">Plan type</span>
-                            <select
-                              value={toolConfig.plan}
-                              onChange={(event) =>
-                                updateToolRow(index, { plan: event.currentTarget.value as PlanTier })
-                              }
-                              className="field__control field__control--soft"
-                            >
-                              {rowPlanOptions.map((plan) => (
-                                <option key={plan} value={plan}>
-                                  {PLAN_LABELS[plan]}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-
-                          {/* Cursor-specific plan variant / custom price handling */}
-                          {toolConfig.tool === SupportedTool.Cursor ? (
-                            toolConfig.plan === PlanTier.Individual ? (
-                              <label className="field">
-                                <span className="field__label">Individual tier</span>
-                                <select
-                                  value={toolConfig.planVariant ?? "pro"}
-                                  onChange={(event) =>
-                                    updateToolRow(index, { planVariant: event.currentTarget.value })
-                                  }
-                                  className="field__control field__control--soft"
-                                >
-                                  {CURSOR_INDIVIDUAL_OPTIONS.map((o) => (
-                                    <option key={o.id} value={o.id}>
-                                      {o.label} — ${o.price}/seat
+                          <div className="tool-card__grid" style={{ marginTop: 10 }}>
+                            <label className="field">
+                              <span className="field__label">Tool</span>
+                              <select
+                                value={toolConfig.tool}
+                                onChange={(event) => updateToolRow(index, { tool: event.currentTarget.value as SupportedTool })}
+                                className="field__control field__control--soft"
+                              >
+                                {rowToolOptions.map((tool) => {
+                                  const isTakenByAnotherRow = selectedTools.get(tool) !== undefined && tool !== toolConfig.tool;
+                                  return (
+                                    <option key={tool} value={tool} disabled={isTakenByAnotherRow}>
+                                      {TOOL_LABELS[tool]}
                                     </option>
+                                  );
+                                })}
+                              </select>
+                            </label>
+
+                            <label className="field">
+                              <span className="field__label">Plan / Variant</span>
+                              {toolConfig.tool === SupportedTool.GitHubCopilot ? (
+                                <select value={toolConfig.planVariant ?? "free"} onChange={(e) => updateToolRow(index, { planVariant: e.currentTarget.value })} className="field__control field__control--soft">
+                                  {COPILOT_TIER_OPTIONS.map((o) => (
+                                    <option key={o.id} value={o.id}>{renderOptionLabel(o)}</option>
                                   ))}
                                 </select>
-                              </label>
-                            ) : toolConfig.plan === PlanTier.Team ? (
-                              <label className="field">
-                                <span className="field__label">Team pricing</span>
-                                <div className="field__control field__control--soft" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                  <span> $40 / user — total will be seats × $40 </span>
-                                </div>
-                              </label>
-                            ) : toolConfig.plan === PlanTier.Enterprise ? (
-                              <label className="field">
-                                <span className="field__label">Enterprise custom monthly price (USD)</span>
-                                <input
-                                  type="number"
-                                  min={0}
-                                  step={0.01}
-                                  value={toolConfig.monthlySpend}
-                                  onChange={(event) =>
-                                    updateToolRow(index, { monthlySpend: clampCurrency(event.currentTarget.valueAsNumber || 0) })
-                                  }
-                                  className="field__control field__control--soft"
-                                />
-                              </label>
-                            ) : null
-                          ) : null}
+                              ) : toolConfig.tool === SupportedTool.Claude ? (
+                                <select value={toolConfig.planVariant ?? "free"} onChange={(e) => updateToolRow(index, { planVariant: e.currentTarget.value })} className="field__control field__control--soft">
+                                  {CLAUDE_TIER_OPTIONS.map((o) => (
+                                    <option key={o.id} value={o.id}>{renderOptionLabel(o)}</option>
+                                  ))}
+                                </select>
+                              ) : toolConfig.tool === SupportedTool.ChatGPT ? (
+                                <select value={toolConfig.planVariant ?? "free"} onChange={(e) => updateToolRow(index, { planVariant: e.currentTarget.value })} className="field__control field__control--soft">
+                                  {CHATGPT_TIER_OPTIONS.map((o) => (
+                                    <option key={o.id} value={o.id}>{renderOptionLabel(o)}</option>
+                                  ))}
+                                </select>
+                              ) : toolConfig.tool === SupportedTool.AnthropicApi ? (
+                                <select value={toolConfig.planVariant ?? "opus_4_7"} onChange={(e) => updateToolRow(index, { planVariant: e.currentTarget.value })} className="field__control field__control--soft">
+                                  {ANTHROPIC_MODEL_OPTIONS.map((o) => (
+                                    <option key={o.id} value={o.id}>{renderOptionLabel(o)}</option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <select value={toolConfig.plan} onChange={(e) => updateToolRow(index, { plan: e.currentTarget.value as PlanTier })} className="field__control field__control--soft">
+                                  {rowPlanOptions.map((plan) => <option key={plan} value={plan}>{PLAN_LABELS[plan]}</option>)}
+                                </select>
+                              )}
+                            </label>
 
-                          {/* Seats only required for non-Cursor tools or Cursor Team plan */}
-                          {!(toolConfig.tool === SupportedTool.Cursor && toolConfig.plan !== PlanTier.Team) ? (
                             <label className="field">
                               <span className="field__label">Seats</span>
-                              <input
-                                type="number"
-                                min={0}
-                                step={1}
-                                value={toolConfig.seats}
-                                onChange={(event) =>
-                                  updateToolRow(index, {
-                                    seats: clampWholeNumber(event.currentTarget.valueAsNumber || 0),
-                                  })
-                                }
-                                className="field__control field__control--soft"
-                              />
+                              <input type="number" min={0} step={1} value={toolConfig.seats} onChange={(e) => updateToolRow(index, { seats: clampWholeNumber(e.currentTarget.valueAsNumber || 0) })} className="field__control field__control--soft" />
                             </label>
-                          ) : null}
 
-                          <label className="field">
-                            <span className="field__label">Current monthly spend (USD)</span>
-                            <input
-                              type="number"
-                              min={0}
-                              step={0.01}
-                              value={toolConfig.monthlySpend}
-                              onChange={(event) =>
-                                updateToolRow(index, {
-                                  monthlySpend: clampCurrency(event.currentTarget.valueAsNumber || 0),
-                                })
-                              }
-                              className="field__control field__control--soft"
-                              // for Cursor rows where spend is computed automatically, disable manual edit
-                              disabled={toolConfig.tool === SupportedTool.Cursor && (toolConfig.plan === PlanTier.Individual || toolConfig.plan === PlanTier.Team || toolConfig.plan === PlanTier.Hobby)}
-                            />
-                          </label>
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              )}
-
-              {!canAddAnotherTool ? (
-                <p className="panel__text spacer-top">All supported tools are already in use. Remove a row to add another.</p>
-              ) : null}
-            </div>
-          </section>
-        </div>
-
-        <aside className="audit-form__aside">
-          <section className="callout callout--dark">
-            <p className="callout__eyebrow">Summary</p>
-            <p className="callout__value">${totalMonthlySpend.toFixed(2)}</p>
-            <p className="callout__text">
-              Current monthly total across all tracked tools. This is the number the audit will anchor on.
-            </p>
-
-            <dl className="summary-grid">
-              <div className="summary-card">
-                <dt>Team</dt>
-                <dd>{form.teamSize} people</dd>
+                            <label className="field">
+                              <span className="field__label">Monthly spend (USD)</span>
+                              <input type="number" min={0} step={0.01} value={toolConfig.monthlySpend} onChange={(e) => updateToolRow(index, { monthlySpend: clampCurrency(e.currentTarget.valueAsNumber || 0) })} className="field__control field__control--soft" />
+                            </label>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-              <div className="summary-card">
-                <dt>Use case</dt>
-                <dd>{USE_CASE_LABELS[form.primaryUseCase]}</dd>
-              </div>
-              <div className="summary-card">
-                <dt>Tools</dt>
-                <dd>{form.tools.length} tracked</dd>
-              </div>
-            </dl>
-          </section>
+            </section>
+          </div>
 
-          <section className="panel panel--surface">
-            <div className="panel__inner">
-              <p className="panel__title">What happens next</p>
-              <ul className="callout-list">
-                <li className="callout-list__item">Review the spend total and team context before exporting.</li>
-                <li className="callout-list__item">Reset the workspace if you need to start a fresh audit.</li>
-                <li className="callout-list__item">Generate a shareable payload when the data is ready.</li>
-              </ul>
-            </div>
-          </section>
-
-          <section className="panel panel--surface">
-            <div className="panel__inner">
-              <div>
-                <p className="panel__kicker">Current monthly total</p>
+          <aside className="audit-form__aside">
+            <section className="panel panel--surface">
+              <div className="panel__inner">
+                <p className="panel__kicker">Total</p>
                 <p className="form-footer__value">${totalMonthlySpend.toFixed(2)}</p>
-                <p className="form-footer__note">Use this to confirm the audit is ready before exporting.</p>
+                <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                  <button type="button" onClick={resetForm} className="btn btn--secondary">Reset</button>
+                  <button type="submit" className="btn btn--primary">Generate audit</button>
+                </div>
               </div>
-
-              <div className="action-row">
-                <button type="button" onClick={resetForm} className="btn btn--secondary">
-                  Reset
-                </button>
-                <button type="submit" className="btn btn--primary">
-                  Generate shareable audit
-                </button>
-              </div>
-            </div>
-          </section>
-        </aside>
-      </div>
+            </section>
+          </aside>
+        </div>
       </form>
 
       {auditResults ? (
-        <div className="mt-10">
-          {/* Lazy-render AuditResults to show computed recommendations */}
+        <div style={{ marginTop: 24 }}>
           {/* eslint-disable-next-line @typescript-eslint/no-var-requires */}
           {(() => {
             const AuditResults = require("./AuditResults").default;
