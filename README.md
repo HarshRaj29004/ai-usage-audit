@@ -1,13 +1,11 @@
-# AI Usage Audit
+# AI Spend Audit Engine
 
-Deterministic spend-audit app for comparing AI tool subscriptions and API usage. The form captures team size, primary use case, usage intensity, and per-tool spend, then produces a savings breakdown with recommended plan adjustments.
+A high-fidelity, production-grade lead generation utility built for Credex to surface real-time infrastructure overspend across active enterprise AI developer tools. This platform maps everyday development habits into hard usage request volumes to calculate defensible, optimized subscription tiers.
 
-## What it does
+* Live Deployed URL: https://ai-usage-audit.vercel.app/
+* Core Tech Stack: Next.js 14 (App Router), TypeScript, Tailwind CSS, LocalStorage Session State Persistence.
 
-- Tracks spend for Cursor, GitHub Copilot, Claude, ChatGPT, and API-backed usage.
-- Lets you choose a usage intensity band so recommendations can distinguish light, standard, and heavy workloads.
-- Adds new tool rows to the top of the list as blank drafts until a tool is selected.
-
-## Validation
-
-- Production build passes with `npm run build`.
+## Quick Start Pipeline
+1. Clone the repository and install matching packages:
+	```bash
+	npm install

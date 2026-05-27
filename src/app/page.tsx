@@ -7,7 +7,7 @@ export default function HomePage() {
       <div className="app-shell__content">
         <section className="hero">
           <div className="hero__copy">
-            <p className="eyebrow">AI Spend Audit</p>
+            <p className="eyebrow">AI Usage Audit</p>
             <h1 className="hero__title">Turn AI tool spend into a clean, shareable operating snapshot.</h1>
             <p className="hero__lede">
               Capture team context, persist edits locally, and export an audit payload without storing sensitive data in the browser or on a server.

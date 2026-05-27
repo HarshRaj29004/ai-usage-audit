@@ -644,14 +644,23 @@ export function SpendForm({ initialState, onSubmit, className }: SpendFormProps)
             // eslint-disable-next-line @typescript-eslint/no-var-requires
             const { calculateAudit } = require("../lib/auditEngine");
             const engineOutput = calculateAudit(selectedForm);
+            const breakdownByToolId = new Map<
+              SupportedTool,
+              { currentSpend: number; recommendedSpend: number; savings: number; reasoning: string }
+            >(
+              engineOutput.breakdown.map(
+                (entry: { toolId: SupportedTool; currentSpend: number; recommendedSpend: number; savings: number; reasoning: string }) =>
+                  [entry.toolId, entry] as const,
+              ),
+            );
 
             const tools = selectedForm.tools.map((t) => {
-              const entry = engineOutput.breakdown.find((b: any) => String(b.toolId) === String(t.tool));
+              const entry = breakdownByToolId.get(t.tool);
               return {
                 tool: String(t.tool),
                 label: TOOL_LABELS[t.tool as SupportedTool] ?? String(t.tool),
                 plan: String(t.plan),
-                currentMonthly: Number(t.monthlySpend ?? 0),
+                currentMonthly: entry ? Number(entry.currentSpend ?? t.monthlySpend ?? 0) : Number(t.monthlySpend ?? 0),
                 recommendedMonthly: entry ? Number(entry.recommendedSpend ?? 0) : Number(t.monthlySpend ?? 0),
                 savings: entry ? Number(entry.savings ?? 0) : 0,
                 reason: entry ? String(entry.reasoning ?? "") : "",

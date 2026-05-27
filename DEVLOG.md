@@ -19,7 +19,6 @@
 
 ## Day 2 2026-05-23
 **Hours worked:** 3
-**Overall progress:** Built the persistent spend input form, added dynamic tool rows with add/remove controls, and connected the UI to localStorage so edits survive reloads.
 
 **What I did:**
 - Finalized the core audit data contracts and canonical `src` module paths.
@@ -43,21 +42,32 @@
 
 
 ## Day 3 2026-05-24
-- **Hours worked:** 3
+**Hours worked:** 3
+
 - **What I did:** Implemented a deterministic, math-driven audit engine (`src/lib/auditEngine.ts`) that consumes form state and returns per-tool breakdowns, recommended spends, and savings. Added a preview route for results and validated a production build. The engine includes overkill detection (downgrade small-seat Team/Business plans), coding-overlap consolidation logic (Cursor vs Copilot), and a retail-vs-credit 30% discount baseline for large spends.  
+
 - **What I learned:** Pricing tier logic must be explicitly mapped per-tool; deterministic consolidation rules avoid ambiguous recommendations and make savings predictable. Small-seat enterprise tiers are common sources of easy wins.  
-- **Blockers:** None blocking; integration with the real calculation pipeline (if differing input shapes) and lead-capture/export workflows remain to be connected.  
+
+- **Blockers:** None 
+
 - **Plan for tomorrow:** Integrate `calculateAudit` with the UI input flow, implement CSV export and persistent lead-capture, and add automated unit tests for the audit engine.
 
 ## Day 4 2026-05-25
-- **Hours worked:** 4  
+**Hours worked:** 4
+
 - **What I did:** Updated plan mappings and pricing models for each supported tool (Cursor, GitHub Copilot, Claude, ChatGPT, Anthropic/OpenAI), adding `planVariant` handling and hierarchical plans so the audit engine and UI are ready for production use.
+
 - **Blockers:** None.  
+
 - **Plan for tomorrow:** Tighten the results presentation and add any remaining documentation notes if the input model changes again.
 
 ## Day 5 2026-05-26
-- **Hours worked:** 4  
+**Hours worked:** 4  
+
 - **What I did:** Added an explicit usage intensity selector to the spend form, persisted it through local storage, and kept the audit engine aligned with the new form state. I also changed tool entry behavior so newly added rows appear at the top as blank drafts with a `--` placeholder until a tool is selected.  
+
 - **What I learned:** When a form needs ordering semantics, prepending a draft row is cleaner than trying to reshuffle submitted data after the fact. Hidden heuristics are less useful than a simple user-facing selector when the recommendation depends on usage bands.  
+
 - **Blockers:** None.  
+
 - **Plan for tomorrow:** Tighten the results presentation and add any remaining documentation notes if the input model changes again.

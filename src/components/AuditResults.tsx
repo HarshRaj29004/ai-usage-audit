@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import type { ReactElement } from "react";
 
 export interface AuditToolResult {
@@ -24,6 +24,10 @@ export interface AuditResultsOutput {
 
 export default function AuditResults({ results }: { results: AuditResultsOutput }): ReactElement {
   const [email, setEmail] = useState("");
+  const [aiSummary, setAiSummary] = useState<string | undefined>(results.aiSummary);
+  const [aiStructured, setAiStructured] = useState<any | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const summaryRef = useRef<HTMLDivElement | null>(null);
   const monthlySavings = useMemo(() => {
     if (typeof results.totalMonthlySavings === "number") return results.totalMonthlySavings;
     return results.tools?.reduce((s, t) => s + (t.savings ?? Math.max(0, (t.currentMonthly ?? 0) - (t.recommendedMonthly ?? 0))), 0) ?? 0;
@@ -141,12 +145,95 @@ export default function AuditResults({ results }: { results: AuditResultsOutput 
             </div>
           </section>
 
-          <section className="panel panel--soft">
+          <section className="panel panel--soft" ref={summaryRef}>
             <div className="panel__inner">
               <h3 className="panel__title">Executive summary</h3>
-              <blockquote className="callout callout--dark mt-4">
-                <p className="callout__text">{results.aiSummary ?? "No AI summary available."}</p>
-              </blockquote>
+              <p className="mt-2 text-sm text-slate-500">Generate a concise executive readout from the audit results.</p>
+              <div className="flex items-start gap-3">
+                <blockquote className="callout callout--dark mt-4 flex-1">
+                  {aiStructured ? (
+                    <div>
+                      <h4 className="text-lg font-semibold">{aiStructured.title}</h4>
+                      <div className="mt-2 text-sm text-slate-700">
+                        <p><strong>Total monthly savings:</strong> {aiStructured.totalMonthlySavings}</p>
+                        <p className="mt-1"><strong>Highest ROI tool:</strong> {aiStructured.highestROITool}</p>
+                        <div className="mt-2">
+                          <strong>Strategic recommendations:</strong>
+                          <ul className="list-disc list-inside mt-1">
+                            {(aiStructured.strategicRecommendations || []).map((r: any, idx: number) => (
+                              <li key={idx} className="mt-1">
+                                <div className="font-semibold">{r.title}</div>
+                                <div className="text-sm text-slate-700 mt-0.5"><strong>Cause:</strong> {r.cause}</div>
+                                <div className="text-sm text-slate-700"><strong>Benefit:</strong> {r.benefit}</div>
+                                {r.notes ? <div className="text-sm text-slate-500">{r.notes}</div> : null}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="callout__text whitespace-pre-wrap">{aiSummary ?? "No AI summary available yet."}</p>
+                  )}
+                </blockquote>
+                <div className="mt-4">
+                  <button
+                    className="btn btn--secondary"
+                    onClick={async () => {
+                      try {
+                        setAiLoading(true);
+                        const res = await fetch("/api/llm-summary", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify(results),
+                        });
+
+                        if (!res.ok) {
+                          let errText = "Failed to get AI summary";
+                          try {
+                            const errJson = await res.json();
+                            errText = errJson?.error ?? JSON.stringify(errJson) ?? errText;
+                            if (errJson?.hint) errText += " — " + errJson.hint;
+                          } catch (e) {
+                            const txt = await res.text().catch(() => null);
+                            if (txt) errText = txt;
+                          }
+                          throw new Error(errText || "Failed to get AI summary");
+                        }
+
+                        const data = await res.json();
+                        // Accept either a parsed JSON object (preferred) or raw text
+                        if (data?.summary && typeof data.summary === "object") {
+                          setAiStructured(data.summary);
+                          setAiSummary(undefined);
+                        } else if (data?.summaryText) {
+                          setAiSummary(data.summaryText);
+                          setAiStructured(null);
+                        } else if (typeof data?.summary === "string") {
+                          setAiSummary(data.summary);
+                          setAiStructured(null);
+                        } else {
+                          setAiSummary(JSON.stringify(data));
+                          setAiStructured(null);
+                        }
+
+                        requestAnimationFrame(() => {
+                          summaryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                        });
+                      } catch (err) {
+                        console.error(err);
+                        const message = err instanceof Error ? err.message : String(err);
+                        alert(`Unable to generate AI summary — ${message}`);
+                      } finally {
+                        setAiLoading(false);
+                      }
+                    }}
+                    disabled={aiLoading}
+                  >
+                    {aiLoading ? "Summarizing…" : "Summarize with AI"}
+                  </button>
+                </div>
+              </div>
             </div>
           </section>
         </div>

@@ -12,7 +12,7 @@ import {
   UseCase,
 } from "../types/audit";
 
-const DEFAULT_STORAGE_KEY = "ai-spend-audit:form";
+const DEFAULT_STORAGE_KEY = "AI-usage-Audit:form";
 
 const DEFAULT_FORM_STATE: AuditFormInputState = {
   teamSize: 1,
